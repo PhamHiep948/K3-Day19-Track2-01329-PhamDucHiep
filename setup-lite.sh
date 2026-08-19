@@ -4,27 +4,54 @@
 
 set -euo pipefail
 
+# Windows console mặc định cp1252 — Python print `→` / tiếng Việt sẽ crash.
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 echo "[lite] Day 19 lightweight setup"
 echo "[lite] Stack: fastembed + qdrant-client[memory] + rank-bm25 + feast(sqlite) + FastAPI"
 echo
 
 # ── 1. Python ───────────────────────────────────────────────────────────
-command -v python3 >/dev/null 2>&1 || { echo "[lite] python3 not found. Install Python 3.10+."; exit 1; }
-PY_VER=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
-echo "[lite] system python3 is $PY_VER (the venv may differ — reported below)"
+# Windows/Git Bash thường có `python` + `py` launcher, không có `python3`.
+# Python 3.14 chạy được (setup tự nâng dill) nhưng feast/pyarrow ổn định hơn
+# trên 3.11–3.13 — ưu tiên 3.11 nếu máy có, rồi mới fallback.
+create_venv_with() {
+  echo "[lite] Creating venv with: $*"
+  "$@" -m venv .venv
+}
 
-# ── 2. venv ─────────────────────────────────────────────────────────────
 if [ ! -d ".venv" ]; then
   if command -v uv >/dev/null 2>&1; then
     echo "[lite] Creating venv with uv (faster)"
     uv venv .venv
+  elif command -v py >/dev/null 2>&1 && py -3.11 -c "import sys" >/dev/null 2>&1; then
+    echo "[lite] Python 3.11 detected via py launcher — using it (ổn định hơn 3.14 cho feast)"
+    create_venv_with py -3.11
+  elif command -v python3 >/dev/null 2>&1; then
+    create_venv_with python3
+  elif command -v python >/dev/null 2>&1; then
+    create_venv_with python
   else
-    echo "[lite] Creating venv with python -m venv"
-    python3 -m venv .venv
+    echo "[lite] python3/python not found. Install Python 3.10+ (https://www.python.org/downloads/)."
+    echo "[lite] Trên Windows nhớ tick 'Add python.exe to PATH' và mở lại Git Bash."
+    exit 1
   fi
 fi
+
+# Windows venv = .venv/Scripts/activate ; Unix = .venv/bin/activate
 # shellcheck source=/dev/null
-source .venv/bin/activate
+if [ -f ".venv/bin/activate" ]; then
+  source .venv/bin/activate
+elif [ -f ".venv/Scripts/activate" ]; then
+  source .venv/Scripts/activate
+else
+  echo "[lite] venv activate script not found under .venv/bin or .venv/Scripts"
+  exit 1
+fi
+
+PY_VER=$(python -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+echo "[lite] active interpreter is Python $PY_VER ($(python -c 'import sys; print(sys.executable)'))"
 
 # ── 3. Install deps ─────────────────────────────────────────────────────
 # `uv venv` may pick a different interpreter than the system `python3`, so the
@@ -44,10 +71,11 @@ if command -v uv >/dev/null 2>&1; then
     uv pip install -r requirements.txt
   fi
 else
-  pip install -q -U pip
-  pip install -q -r requirements.txt
+  # Windows: `pip install -U pip` bị chặn ("To modify pip, please run python -m pip").
+  python -m pip install -q -U pip
+  python -m pip install -q -r requirements.txt
   if [ "$NEED_DILL_OVERRIDE" = "1" ]; then
-    pip install -q --upgrade 'dill>=0.4,<1.0'
+    python -m pip install -q --upgrade 'dill>=0.4,<1.0'
   fi
 fi
 
@@ -76,7 +104,8 @@ cat <<EOF
 
 [lite] Done. Activate the venv and start working:
 
-    source .venv/bin/activate
+    source .venv/Scripts/activate   # Windows/Git Bash
+    # source .venv/bin/activate     # macOS/Linux
     make api       # start FastAPI on :8000
     make lab       # open Jupyter on :8888
     make benchmark # Precision@10 + latency table

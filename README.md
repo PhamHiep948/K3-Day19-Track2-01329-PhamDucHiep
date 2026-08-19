@@ -22,6 +22,10 @@ Build hybrid search API + Feast feature store hoàn chỉnh, đo Precision@10 v�
 
 ---
 
+> **Windows / Git Bash:** đọc [`HUONG_DAN_CHAY.md`](HUONG_DAN_CHAY.md) trước —
+> `python3` không có, venv nằm ở `.venv/Scripts`, console cp1252, và `localhost`
+> hay treo IPv6. File đó ghi đúng lệnh đã chạy + lỗi đã sửa trên máy lab này.
+
 ## Quick Start — Lite (recommended)
 
 ```bash

@@ -16,7 +16,17 @@ from __future__ import annotations
 
 import json
 import random
+import sys
 from pathlib import Path
+
+# Windows cp1252 cannot print `→` — reconfigure before any print().
+if str(Path(__file__).resolve().parent.parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+try:
+    from app.stdio_utf8 import ensure_utf8
+    ensure_utf8()
+except Exception:
+    pass
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"

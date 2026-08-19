@@ -17,6 +17,7 @@
 import _setup  # noqa: F401
 import statistics
 import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -30,14 +31,21 @@ import httpx
 
 # %%
 ROOT = Path(_setup.__file__).resolve().parent.parent
+# `python -m uvicorn` luôn tìm đúng interpreter của kernel (Windows không
+# luôn có `uvicorn` trên PATH dù đã activate venv).
 proc = subprocess.Popen(
-    ["uvicorn", "app.main:app", "--port", "8000", "--log-level", "warning"],
+    [sys.executable, "-m", "uvicorn", "app.main:app",
+     "--host", "127.0.0.1", "--port", "8000", "--log-level", "warning"],
     cwd=str(ROOT),
 )
 
-# Đợi server up + warm (Searcher.from_corpus loads embeddings + indexes 1000 docs)
-URL = "http://localhost:8000"
-for _ in range(60):
+# Đợi server up + warm (Searcher.from_corpus loads embeddings + indexes 1000 docs).
+# Trên Windows/CPU chậm lần đầu có thể > 60s — đã đo ~2–4 phút trên máy lab này.
+# Dùng 127.0.0.1 chứ không phải localhost: trên Windows localhost hay resolve
+# ra ::1 trước, trong khi uvicorn mặc định chỉ listen IPv4 → request treo.
+URL = "http://127.0.0.1:8000"
+WAIT_S = 180
+for _ in range(WAIT_S):
     try:
         r = httpx.get(f"{URL}/healthz", timeout=2.0)
         if r.status_code == 200 and r.json().get("ready"):
@@ -46,7 +54,7 @@ for _ in range(60):
         pass
     time.sleep(1)
 else:
-    raise RuntimeError("API didn't become ready within 60s")
+    raise RuntimeError(f"API didn't become ready within {WAIT_S}s")
 
 print(httpx.get(f"{URL}/healthz").json())
 
@@ -54,7 +62,7 @@ print(httpx.get(f"{URL}/healthz").json())
 # ## 2. Single query — kiểm tra response shape
 
 # %%
-r = httpx.get(f"{URL}/search", params={"q": "cloud computing tự động mở rộng", "mode": "hybrid"})
+r = httpx.get(f"{URL}/search", params={"q": "cloud computing tự động mở rộng", "mode": "hybrid"}, timeout=30.0)
 r.raise_for_status()
 body = r.json()
 print(f"latency_ms: {body['latency_ms']:.1f}")
@@ -77,6 +85,11 @@ import json
 DATA = ROOT / "data"
 golden = [json.loads(l) for l in (DATA / "golden_set.jsonl").open(encoding="utf-8")]
 
+# Warm-up: ONNX session + Qdrant cache. Không warmup thì P99 bị cold-start
+# (trên máy Windows này query encode ~70ms; 10 query đủ để ổn định tail).
+for q in golden[:10]:
+    httpx.get(f"{URL}/search", params={"q": q["query"], "mode": "hybrid"}, timeout=30.0)
+
 
 def percentile(values: list[float], p: float) -> float:
     n = len(values)
@@ -91,7 +104,7 @@ def benchmark_mode(mode: str, reps: int = 2) -> dict[str, float]:
     for _ in range(reps):
         for q in golden:
             t0 = time.perf_counter()
-            r = httpx.get(f"{URL}/search", params={"q": q["query"], "mode": mode})
+            r = httpx.get(f"{URL}/search", params={"q": q["query"], "mode": mode}, timeout=30.0)
             wall_latencies.append((time.perf_counter() - t0) * 1000)
             server_latencies.append(r.json()["latency_ms"])
     return {

@@ -22,6 +22,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+try:
+    from app.stdio_utf8 import ensure_utf8
+    ensure_utf8()
+except Exception:
+    pass
 
 from app.search import Searcher  # noqa: E402  -- depends on sys.path above
 

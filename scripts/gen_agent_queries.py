@@ -23,6 +23,11 @@ from pathlib import Path
 warnings.filterwarnings("ignore")
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+try:
+    from app.stdio_utf8 import ensure_utf8
+    ensure_utf8()
+except Exception:
+    pass
 
 from app.filters import FilteredIndex          # noqa: E402
 from app.search import Searcher                # noqa: E402

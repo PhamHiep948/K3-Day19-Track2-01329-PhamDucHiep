@@ -19,6 +19,21 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+# Jupyter + pyzmq on Windows uses ProactorEventLoop by default; zmq needs Selector.
+if sys.platform == "win32":
+    try:
+        import asyncio
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    except Exception:
+        pass
+
+# Windows: reconfigure stdout so Vietnamese / arrows in notebook prints don't crash.
+try:
+    from app.stdio_utf8 import ensure_utf8  # noqa: E402
+    ensure_utf8()
+except Exception:
+    pass
+
 # Notebooks shell out to the `feast` CLI. Under `make lab` the venv is already
 # active, but under nbconvert / CI it is not, and the call dies with
 # FileNotFoundError: 'feast'. Put the running interpreter's bin dir on PATH so

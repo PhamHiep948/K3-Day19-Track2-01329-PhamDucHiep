@@ -2,12 +2,23 @@
 ## Two paths: lightweight (default, no Docker) and full Docker.
 
 VENV     := .venv
-PY       := $(VENV)/bin/python
-PIP      := $(VENV)/bin/pip
-JUPYTER  := $(VENV)/bin/jupyter
-JUPYTEXT := $(VENV)/bin/jupytext
-UVICORN  := $(VENV)/bin/uvicorn
-PYTEST   := $(VENV)/bin/pytest
+# Windows `python -m venv` puts binaries in Scripts/; Unix uses bin/.
+# Detect after the venv exists; before that, default to Unix so `make help` still works.
+ifneq ($(wildcard $(VENV)/Scripts/python.exe),)
+  VENV_BIN := $(VENV)/Scripts
+else
+  VENV_BIN := $(VENV)/bin
+endif
+PY       := $(VENV_BIN)/python
+PIP      := $(VENV_BIN)/pip
+JUPYTER  := $(VENV_BIN)/jupyter
+JUPYTEXT := $(VENV_BIN)/jupytext
+UVICORN  := $(VENV_BIN)/uvicorn
+PYTEST   := $(VENV_BIN)/pytest
+
+# Windows console is cp1252; without this, seed/verify/notebooks crash on `→`.
+export PYTHONUTF8 := 1
+export PYTHONIOENCODING := utf-8
 
 .DEFAULT_GOAL := help
 
@@ -32,14 +43,13 @@ api: ## [lite] Start FastAPI /search on http://localhost:8000
 	@$(UVICORN) app.main:app --reload --port 8000
 
 lab: ## [lite] Open Jupyter Lab on http://localhost:8888
-	@$(JUPYTEXT) --to notebook --update notebooks/[0-9]*.py 2>/dev/null || true
 	@$(JUPYTER) lab --notebook-dir=notebooks --ServerApp.token='' --no-browser
 
 benchmark: ## [both] Precision@10 (keyword/semantic/hybrid) + P99 latency table
 	@$(PY) scripts/benchmark.py
 
 test: ## [both] Run pytest (app + scripts)
-	@$(PYTEST) -q
+	@$(PYTEST) -q tests
 
 gen-advanced: ## [both] Generate data for the advanced missions (NB6 + NB8)
 	@$(PY) scripts/gen_agent_queries.py
@@ -49,7 +59,7 @@ notebooks: ## [both] Execute ALL notebooks headless (what the grader runs)
 	@$(JUPYTEXT) --to notebook --update notebooks/[0-9]*.py >/dev/null 2>&1 || true
 	@for nb in notebooks/[0-9]*.ipynb; do \
 		printf '%-42s' "$$nb"; \
-		PATH="$(PWD)/$(VENV)/bin:$$PATH" $(VENV)/bin/jupyter nbconvert --to notebook \
+		PATH="$(CURDIR)/$(VENV_BIN):$$PATH" $(JUPYTER) nbconvert --to notebook \
 			--execute --inplace "$$nb" --ExecutePreprocessor.timeout=900 \
 			>/dev/null 2>&1 && echo PASS || echo FAIL; \
 	done

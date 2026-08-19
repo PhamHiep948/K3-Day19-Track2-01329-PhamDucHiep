@@ -12,6 +12,12 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 warnings.filterwarnings("ignore")
 
+try:
+    from app.stdio_utf8 import ensure_utf8
+    ensure_utf8()
+except Exception:
+    pass
+
 
 @pytest.fixture(scope="session")
 def mini_corpus(tmp_path_factory) -> Path:

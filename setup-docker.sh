@@ -4,6 +4,9 @@
 
 set -euo pipefail
 
+export PYTHONUTF8=1
+export PYTHONIOENCODING=utf-8
+
 echo "[docker] Day 19 full Docker setup"
 echo "[docker] Stack: Qdrant (server) + Redis + Postgres + bge-m3 embeddings"
 echo "[docker] Note: bge-m3 is multilingual (much better on Vietnamese) but"
@@ -59,12 +62,27 @@ fi
 if [ ! -d ".venv" ]; then
   if command -v uv >/dev/null 2>&1; then
     uv venv .venv
-  else
+  elif command -v py >/dev/null 2>&1 && py -3.11 -c "import sys" >/dev/null 2>&1; then
+    echo "[docker] Using Python 3.11 via py launcher (ổn định hơn 3.14 cho feast)"
+    py -3.11 -m venv .venv
+  elif command -v python3 >/dev/null 2>&1; then
     python3 -m venv .venv
+  elif command -v python >/dev/null 2>&1; then
+    python -m venv .venv
+  else
+    echo "[docker] python3/python not found. Install Python 3.10+."
+    exit 1
   fi
 fi
 # shellcheck source=/dev/null
-source .venv/bin/activate
+if [ -f ".venv/bin/activate" ]; then
+  source .venv/bin/activate
+elif [ -f ".venv/Scripts/activate" ]; then
+  source .venv/Scripts/activate
+else
+  echo "[docker] venv activate script not found under .venv/bin or .venv/Scripts"
+  exit 1
+fi
 
 # ── 4. Install lite + docker extras ─────────────────────────────────────
 NEED_DILL_OVERRIDE=$(python -c 'import sys; print(1 if sys.version_info >= (3,14) else 0)')
@@ -78,10 +96,10 @@ if command -v uv >/dev/null 2>&1; then
     uv pip install -r requirements.txt -r requirements-full.txt
   fi
 else
-  pip install -q -U pip
-  pip install -q -r requirements.txt -r requirements-full.txt
+  python -m pip install -q -U pip
+  python -m pip install -q -r requirements.txt -r requirements-full.txt
   if [ "$NEED_DILL_OVERRIDE" = "1" ]; then
-    pip install -q --upgrade 'dill>=0.4,<1.0'
+    python -m pip install -q --upgrade 'dill>=0.4,<1.0'
   fi
 fi
 
@@ -121,7 +139,8 @@ cat <<EOF
 
 Activate the venv and continue:
 
-    source .venv/bin/activate
+    source .venv/Scripts/activate   # Windows/Git Bash
+    # source .venv/bin/activate     # macOS/Linux
     make api       # start FastAPI on :8000
     make lab       # open Jupyter on :8888
 
